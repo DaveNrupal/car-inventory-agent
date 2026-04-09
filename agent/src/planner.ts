@@ -10,7 +10,7 @@ export interface Task {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function planTasks(spec: string): Promise<Task[]> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const prompt = `You are a senior React architect. Given the following app specification, decompose it into an ordered list of files to generate.
 
