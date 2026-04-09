@@ -1,0 +1,22 @@
+{
+  "name": "car-inventory-agent",
+  "version": "1.0.0",
+  "description": "Agentic CLI that generates a Car Inventory React app from a natural-language spec",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "generate": "tsx src/index.ts --spec spec.txt"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.87.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}
