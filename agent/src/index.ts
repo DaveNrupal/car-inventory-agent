@@ -82,6 +82,8 @@ async function run() {
     console.log(`\n  Generating: ${task.file}`);
     const content = await generateFile(task, tasks, spec, outputDir);
     writeFile(outputDir, task.file, content);
+    // Small delay between files to avoid rate limiting
+    await new Promise((res) => setTimeout(res, 2000));
   }
 
   // Step 4: Validate + fix loop
