@@ -1,0 +1,11 @@
+Build a Car Inventory Manager React + TypeScript app using the existing boilerplate.
+
+Requirements:
+1. Fetch and display a list of cars using Apollo Client via GetCars GraphQL query served by MSW
+2. Show responsive images based on viewport: <=640px use mobile, 641-1023px use tablet, >=1024px use desktop
+3. Display each car in a Material UI card showing make, model, year, color, and image
+4. Include an Add Car form that submits via AddCar GraphQL mutation
+5. Add a search bar to filter cars by model name
+6. Add sorting controls to sort by year or make
+7. Extract all GraphQL logic into a useCars() custom hook
+8. Write unit tests for CarCard, AddCarForm, and SearchBar components
