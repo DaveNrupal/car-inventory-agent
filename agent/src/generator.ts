@@ -58,7 +58,7 @@ export async function generateFile(
   spec: string,
   outputDir: string
 ): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
   const depContext = buildDependencyContext(task, allTasks, outputDir);
 
   const prompt = `You are a senior React + TypeScript engineer. Generate the file described below.
