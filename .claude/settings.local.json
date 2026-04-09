@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /e/Nrupal_Study/Projects/BIMM_Coding/Fullstack-Coding-Challenge-main -not -path */node_modules/* -type f -o -type d)"
+    ]
+  }
+}
