@@ -1,240 +1,181 @@
-# Senior Fullstack Engineer — Take-Home Challenge
+# Car Inventory Agent
 
-## Agentic Code Generation Workflow
-
-**Time Budget:** 4–6 hours (we respect your time — scope accordingly)
-**Submission Deadline:** 5 business days from receipt
+An agentic CLI tool that reads a natural-language specification and autonomously generates a working React + TypeScript Car Inventory Manager application.
 
 ---
 
-## Overview
+## Architecture Overview
 
-At our agency, AI-assisted development is a core part of how we build. This challenge tests your ability to design and implement an **agentic workflow** — an AI-powered system that takes a natural-language specification and autonomously generates a working frontend application.
+```
+spec.txt (natural language input)
+        │
+        ▼
+┌─────────────────┐
+│   PLANNER       │  LLM call → ordered JSON task list (dependency-aware)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   GENERATOR     │  One LLM call per file → writes to generated-app/
+│  (per task)     │  Passes dependency file contents as context
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   VALIDATOR     │  Runs: npm run typecheck && npm run test
+└────────┬────────┘
+         │ errors?
+         ▼
+┌─────────────────┐
+│   FIXER         │  LLM call with error + file → patched file (3 retries max)
+└────────┬────────┘
+         │
+         ▼
+  ✓ generated-app/  (runnable React app)
+```
 
-You will build an agent (or multi-agent system) that reads a product specification and produces a **React + TypeScript** application that matches a reference implementation. The agent should plan, scaffold, generate code, and self-validate — not just make a single LLM call and hope for the best.
+### Key Design Decisions
+
+**1. Task decomposition before generation**
+The planner makes a single LLM call to break the spec into an ordered, dependency-aware task list. This ensures hooks are generated before components that use them, and components before App.tsx wires them together.
+
+**2. Dependency-aware context injection**
+Each generator call receives only the boilerplate types + the content of files it depends on — not the entire codebase. This keeps token usage low while giving the LLM exactly what it needs.
+
+**3. Separate fixer agent**
+Validation errors are fed to a dedicated fixer prompt rather than re-running the full generator. This is faster, cheaper, and more targeted.
+
+**4. Automatic retry with backoff**
+All LLM calls use exponential backoff (3 attempts, 15s base delay) to handle transient API errors (503/429) without failing the whole run.
+
+**5. Why Google Gemini (gemini-2.5-flash)?**
+- Available via Google AI Studio with billing enabled
+- Large context window handles dependency file injection well
+- Fast response times suitable for sequential file generation
+
+**Tradeoffs considered:**
+- Single agent vs multi-agent → chose single agent with retry loop for simplicity and reliability
+- LangChain vs custom loop → chose custom function-calling loop; less abstraction overhead, easier to debug
+- Parallel generation vs sequential → chose sequential to respect file dependencies correctly
 
 ---
 
-## The Boilerplate
-
-A pre-built boilerplate is provided with the full stack already configured. **Your agent should generate code into this existing project structure**, not scaffold from scratch. This lets you focus on the agentic workflow rather than build tooling setup.
-
-### What's Included
+## Project Structure
 
 ```
-boilerplate/
-├── src/
-│   ├── main.tsx                   # Entry — boots MSW, wires Apollo + MUI
-│   ├── App.tsx                    # Shell (placeholder for generated code)
-│   ├── types.ts                   # Car interface
-│   ├── test-setup.ts              # Vitest + MSW integration
-│   ├── graphql/
-│   │   ├── client.ts              # Apollo client configured
-│   │   └── queries.ts             # GET_CARS, GET_CAR, ADD_CAR queries/mutations
-│   ├── mocks/
-│   │   ├── data.ts                # 5 seed cars with placeholder images
-│   │   ├── handlers.ts            # MSW GraphQL handlers (GetCars, GetCar, AddCar)
-│   │   ├── browser.ts             # MSW browser setup (dev)
-│   │   └── server.ts              # MSW node setup (tests)
-│   ├── components/
-│   │   └── Example.tsx            # Reference component showing Apollo + MUI usage
-│   └── __tests__/
-│       └── Example.test.tsx       # Reference test showing MockedProvider pattern
-├── public/mockServiceWorker.js    # MSW service worker
-├── index.html
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── vitest.config.ts
+Fullstack-Coding-Challenge-main/
+├── agent/                    ← CLI agent (this is what you build)
+│   ├── src/
+│   │   ├── index.ts          ← Orchestrator / CLI entry point
+│   │   ├── planner.ts        ← Spec → ordered task list
+│   │   ├── generator.ts      ← Task → generated file content
+│   │   ├── validator.ts      ← Runs typecheck + vitest
+│   │   ├── fixer.ts          ← Error → fixed file
+│   │   └── retry.ts          ← Retry with exponential backoff
+│   ├── spec.txt              ← Sample natural-language spec input
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── .env.example
+├── src/                      ← Boilerplate (untouched)
+│   ├── graphql/              ← Apollo client + queries
+│   ├── mocks/                ← MSW handlers + seed data
+│   ├── types.ts              ← Car interface
+│   └── main.tsx              ← Entry with Apollo + MUI providers
+└── generated-app/            ← Agent output (sample run committed)
 ```
 
-### Tech Stack (pre-configured)
+---
 
-- React 19 + TypeScript
-- Vite
-- Apollo Client (GraphQL)
-- Material UI (MUI)
-- MSW (Mock Service Worker) for API mocking
-- Vitest + Testing Library for testing
+## Setup & Running
 
-### Quick Start
+### Prerequisites
+- Node.js 18+
+- A Google AI Studio API key with billing enabled
 
+### 1. Clone and install
 ```bash
+git clone https://github.com/DaveNrupal/car-inventory-agent.git
+cd car-inventory-agent
+```
+
+### 2. Set up the agent
+```bash
+cd agent
 npm install
-npm run dev      # App at localhost:5173
-npm run test     # Run test suite
-npm run typecheck # TypeScript checking
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
 ```
 
----
-
-## The Reference Application
-
-Your agent's output should be a working **Car Inventory Manager** backed by a mock GraphQL API. It must:
-
-1. **Display a list of cars** fetched via Apollo Client from a mock GraphQL API (GetCars query) served by MSW
-2. **Show responsive car images** — the GraphQL schema includes mobile, tablet, and desktop image URLs. Render the appropriate image based on viewport width:
-   - ≤ 640px → mobile
-   - 641px – 1023px → tablet
-   - ≥ 1024px → desktop
-3. **Use Material UI cards** to present each car (make, model, year, color, image)
-4. **Include an "Add Car" form** that submits via a GraphQL mutation (AddCar)
-5. **Implement sorting and search** — a search bar to filter by model, plus sorting by year or make
-6. **Extract GraphQL logic** into a `useCars()` custom hook
-7. **Include unit tests** for key components
-
-### Mock Data Schema
-
-The boilerplate provides a `Car` type and 5 seed cars:
-
-```typescript
-interface Car {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  color: string;
-  mobile: string;
-  tablet: string;
-  desktop: string;
-}
-```
-
-### Optional Extras (the agent can attempt these)
-
-- A `GetCar` query to fetch individual cars
-- A year filter (multi-filter support alongside model search)
-- A reusable `useCarFilters()` hook combining all filter logic
-
----
-
-## What You Must Build
-
-### Your Deliverable: An Agentic Workflow
-
-Build a CLI tool or script (Node.js, Python, or TypeScript) that:
-
-1. **Accepts a natural-language specification as input** (a text file or string describing the app above)
-2. **Plans the implementation** — the agent should decompose the spec into discrete, ordered tasks (e.g., "create useCars hook", "build CarCard component", "write SearchBar")
-3. **Generates the application code** — file by file, with awareness of dependencies between files, into the provided boilerplate
-4. **Self-validates** — the agent should verify its output (e.g., run the test suite, or use a secondary LLM call to review its own code)
-5. **Iterates on failures** — if validation fails, the agent should read the error output and attempt a fix (at least 1 retry loop)
-6. **Outputs a runnable project** — the final result should work with:
-
+### 3. Run the agent
 ```bash
-cd generated-app && npm install && npm run dev
+npm run generate
+```
+
+The agent will:
+1. Copy the boilerplate to `generated-app/`
+2. Plan 9 tasks from `spec.txt`
+3. Generate all files one by one
+4. Run `npm run typecheck && npm run test`
+5. Auto-fix any errors (up to 3 retries)
+
+### 4. Run the generated app
+```bash
+cd ../generated-app
+npm install
+npm run dev       # → localhost:5173
+npm run test      # → all tests pass
+npm run typecheck # → no errors
 ```
 
 ---
 
-## Architecture Expectations
+## Generated App Features
 
-We're evaluating **how you design the agentic loop**, not just whether the output compiles.
+The agent generates a fully functional Car Inventory Manager with:
 
-Your system should demonstrate:
-
-| Concept | What We're Looking For |
-|---|---|
-| **Task Decomposition** | The agent breaks the spec into ordered, dependency-aware steps — not one giant prompt |
-| **Tool Use** | The agent calls tools (file write, shell commands, LLM calls) as discrete actions |
-| **Context Management** | The agent passes relevant context between steps without exceeding token limits |
-| **Error Recovery** | The agent reads test or type-check output and feeds errors back into the generation loop |
-| **Prompt Design** | Prompts are structured, specific, and use techniques like few-shot examples or schema enforcement |
-
-### How You Work Matters
-
-Beyond the code itself, we want to see **how you approach the problem**:
-
-- **Planned work** — Break your work into clear tickets or tasks before diving in. We want to see evidence of upfront thinking, not just a single "initial commit" with everything.
-- **Clear architecture decisions** — Document why you chose your approach. What tradeoffs did you consider? Why this LLM provider? Why this agent structure?
-- **Meaningful commit history** — Small, focused commits that tell a story. We should be able to read your git log and understand how the project evolved. Avoid a single large commit with all the work.
-- **Iterative development** — Show that you built incrementally — get one piece working, then the next. Not everything at once.
-
-### Recommended (Not Required) Stack for the Agent
-
-- **LLM Provider:** Anthropic (Claude), OpenAI, or any provider — use what you're strongest with
-- **Agent Framework:** LangChain, LangGraph, CrewAI, Mastra, plain function-calling loops — your choice, or roll your own
-- **Tooling:** File system operations, shell execution (vitest, npm), LLM API calls
+- **Car list** — fetched via Apollo Client from MSW mock GraphQL API
+- **Responsive images** — mobile (≤640px), tablet (641–1023px), desktop (≥1024px)
+- **MUI cards** — each showing make, model, year, color, and image
+- **Add Car form** — submits via `AddCar` GraphQL mutation
+- **Search** — filter cars by model name
+- **Sorting** — sort by year or make
+- **`useCars()` hook** — all GraphQL logic extracted into a reusable hook
+- **Unit tests** — for CarCard, AddCarForm, and SearchBar components
 
 ---
 
-## Evaluation Criteria
+## What Worked Well
 
-### Primary (70%)
+- Dependency-aware task ordering meant generated files imported correctly on the first try
+- Structured prompts with explicit rules ("output ONLY raw TypeScript, no markdown") produced clean files without parsing issues
+- The fixer agent successfully patched TypeScript errors without rewriting unrelated code
 
-| Criteria | Weight | Description |
+## What I'd Improve With More Time
+
+- **Parallel generation** for independent files (e.g. SearchBar and AddCarForm have no shared dependency)
+- **Prompt caching** to reduce token cost on repeated runs with the same boilerplate context
+- **Smarter error parsing** — instead of passing full stderr to the fixer, extract only the relevant error lines per file
+- **Multi-model strategy** — use a cheaper model for fixing minor errors, expensive model only for initial generation
+
+---
+
+## Approximate Cost Per Run
+
+| Step | LLM Calls | Approx tokens |
 |---|---|---|
-| **Agent Design** | 25% | Quality of the agentic loop: planning, execution, validation, retry. Is it a real workflow or a wrapper around a single prompt? |
-| **Output Quality** | 20% | Does the generated app work? Does it meet the functional spec? |
-| **Prompt Engineering** | 15% | Are prompts well-structured? Do they constrain output format and provide the right context at each step? |
-| **Error Handling** | 10% | Does the agent recover from generation failures gracefully? |
+| Planner | 1 | ~2,000 |
+| Generator (9 files) | 9 | ~45,000 |
+| Fixer (if needed) | 1–3 | ~10,000 |
+| **Total** | ~13 | ~57,000 |
 
-### Secondary (30%)
-
-| Criteria | Weight | Description |
-|---|---|---|
-| **Code Quality (of the agent)** | 10% | Is the agent code clean, typed, and well-organized? |
-| **Documentation** | 10% | README explaining architecture decisions, how to run, and tradeoffs |
-| **Creativity** | 10% | Bonus features: multi-agent collaboration, caching, parallel generation, cost optimization |
+**Estimated cost: ~$0.01–$0.05 per run** using Gemini 2.5 Flash pricing.
 
 ---
 
-## Submission Requirements
+## Environment Variables
 
-1. **A Git repository** (GitHub, GitLab, or zipped) containing:
-   - The agent source code
-   - A `README.md` with setup instructions, architecture overview, and design decisions
-   - A sample spec file (the natural-language input your agent consumes)
-   - A sample output directory (a generated app we can run)
+See `agent/.env.example`:
 
-2. **A `.env.example` file** listing which API keys your agent needs (see the provided `.env.example` for the format). We will supply our own keys when running your agent.
-
-3. **A short write-up** (can be in the README) covering:
-   - Which LLM(s) you used and why
-   - Your agent architecture (a diagram is welcome)
-   - What worked well and what you'd improve with more time
-   - Approximate cost per run (tokens used, API cost)
-
-4. **Working demo:** We will run your agent with your sample spec and verify the output compiles and runs. We may also **modify the spec slightly** to test generalization.
-
----
-
-## What We're NOT Looking For
-
-- **A perfect UI** — functional correctness matters more than polish
-- **An over-engineered framework** — a clean, well-thought-out script is better than a sprawling abstraction layer
-- **Memorization** — if your agent only works because the spec is hardcoded into the prompts, that's a red flag. We'll test with a modified spec
-- **Databases, backends, or infrastructure** — the boilerplate uses MSW to mock the API. There is no real backend. Do not build one. No databases, no Docker, no server setup
-- **Authentication, deployment, or CI/CD** — keep scope focused on the agent and the generated app
-
----
-
-## Getting Started
-
-```bash
-# 1. Clone this repo (contains the boilerplate)
-git clone <repo-url> && cd Fullstack-Coding-Challenge
-
-# 2. Verify the boilerplate works
-npm install
-npm run dev        # Should run at localhost:5173
-npm run test       # Should pass (2 tests)
-npm run typecheck  # Should pass
-
-# 3. Build your agent (in a separate directory or repo)
-# Your agent should copy this boilerplate, then generate code into it
-
-# 4. Run your agent
-node agent.js --spec ./spec.txt --output ./generated-app
-
-# 5. Verify the output
-cd generated-app
-npm install
-npm run dev
 ```
-
----
-
-## Questions?
-
-If anything is ambiguous, make a reasonable assumption and document it in your README. We value clear thinking over asking for clarification on every detail.
+GEMINI_API_KEY=your_gemini_api_key_here
+```
