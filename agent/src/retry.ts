@@ -1,7 +1,7 @@
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxAttempts = 5,
-  delayMs = 10000
+  maxAttempts = 3,
+  delayMs = 15000
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -12,9 +12,10 @@ export async function withRetry<T>(
 
       if (isRetryable && attempt < maxAttempts) {
         const wait = delayMs * attempt;
-        console.log(`  ⚠ API error (${status}), retrying in ${wait / 1000}s... (attempt ${attempt}/${maxAttempts})`);
+        console.log(`  ⚠ API error (${status}), waiting ${wait / 1000}s before retry ${attempt}/${maxAttempts - 1}...`);
         await new Promise((res) => setTimeout(res, wait));
       } else {
+        console.log(`  ✗ API error (${status}) — giving up after ${attempt} attempt(s).`);
         throw err;
       }
     }
