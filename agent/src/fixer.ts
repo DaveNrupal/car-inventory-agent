@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 import path from "path";
+import { withRetry } from "./retry.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -33,7 +34,7 @@ ${errors}
 
 Output the fixed file content only (no markdown, no code fences):`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
 
   return text.replace(/```tsx?\n?/g, "").replace(/```\n?/g, "").trim();

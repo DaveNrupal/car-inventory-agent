@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { withRetry } from "./retry.js";
 
 export interface Task {
   id: number;
@@ -51,7 +52,7 @@ Output format (JSON array only, no markdown):
   }
 ]`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
 
   // Strip markdown fences if present

@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 import path from "path";
 import { Task } from "./planner.js";
+import { withRetry } from "./retry.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -83,7 +84,7 @@ Purpose: ${task.description}
 
 Output the file content only (no markdown, no code fences):`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
 
   // Strip markdown fences if present
