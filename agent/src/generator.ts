@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 import path from "path";
 import { Task } from "./planner.js";
 
-const client = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 const BOILERPLATE_CONTEXT = `
 // src/types.ts
@@ -25,10 +25,7 @@ export const GET_CAR = gql\`query GetCar($id: ID!) { car(id: $id) { id make mode
 export const ADD_CAR = gql\`mutation AddCar($make: String!, $model: String!, $year: Int!, $color: String!) { addCar(make: $make, model: $model, year: $year, color: $color) { id make model year color mobile tablet desktop } }\`;
 `;
 
-function readGeneratedFile(
-  outputDir: string,
-  filePath: string
-): string | null {
+function readGeneratedFile(outputDir: string, filePath: string): string | null {
   const fullPath = path.join(outputDir, filePath);
   if (fs.existsSync(fullPath)) {
     return fs.readFileSync(fullPath, "utf-8");
@@ -61,15 +58,10 @@ export async function generateFile(
   spec: string,
   outputDir: string
 ): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   const depContext = buildDependencyContext(task, allTasks, outputDir);
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: `You are a senior React + TypeScript engineer. Generate the file described below.
+  const prompt = `You are a senior React + TypeScript engineer. Generate the file described below.
 
 Rules:
 - Output ONLY the raw TypeScript/TSX file content — no markdown, no code fences, no explanation
@@ -89,19 +81,20 @@ File to generate:
 Path: ${task.file}
 Purpose: ${task.description}
 
-Output the file content only:`,
-      },
-    ],
-  });
+Output the file content only (no markdown, no code fences):`;
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
 
   // Strip markdown fences if present
   return text.replace(/```tsx?\n?/g, "").replace(/```\n?/g, "").trim();
 }
 
-export function writeFile(outputDir: string, filePath: string, content: string): void {
+export function writeFile(
+  outputDir: string,
+  filePath: string,
+  content: string
+): void {
   const fullPath = path.join(outputDir, filePath);
   const dir = path.dirname(fullPath);
   fs.mkdirSync(dir, { recursive: true });
